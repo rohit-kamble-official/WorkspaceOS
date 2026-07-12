@@ -12,6 +12,8 @@ import logger from './utils/logger.js';
 
 const app = express();
 
+// Required for Render, Vercel, Railway, etc.
+app.set('trust proxy', 1);
 // Security headers
 app.use(helmet({
   crossOriginResourcePolicy: { policy: 'cross-origin' }
