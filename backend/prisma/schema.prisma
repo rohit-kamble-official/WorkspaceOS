@@ -1,0 +1,373 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Tenant {
+  id             String   @id @default(uuid())
+  name           String
+  slug           String   @unique
+  email          String   @unique
+  phone          String?
+  logo           String?
+  address        String?
+  city           String?
+  country        String?
+  timezone       String   @default("UTC")
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  users          User[]
+  buildings      Building[]
+  bookings       Booking[]
+  subscriptions  Subscription[]
+  invoices       Invoice[]
+  notifications  Notification[]
+  roles          Role[]
+
+  @@map("tenants")
+}
+
+model User {
+  id              String    @id @default(uuid())
+  tenantId        String
+  email           String
+  password        String
+  firstName       String
+  lastName        String
+  phone           String?
+  avatar          String?
+  isActive        Boolean   @default(true)
+  isEmailVerified Boolean   @default(false)
+  emailVerifyToken String?
+  resetPasswordToken String?
+  resetPasswordExpiry DateTime?
+  lastLoginAt     DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  tenant          Tenant    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userRoles       UserRole[]
+  bookings        Booking[]
+  refreshTokens   RefreshToken[]
+  notifications   Notification[]
+
+  @@unique([tenantId, email])
+  @@map("users")
+}
+
+model Role {
+  id          String   @id @default(uuid())
+  tenantId    String?
+  name        String
+  description String?
+  isSystem    Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant?  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  userRoles   UserRole[]
+  permissions RolePermission[]
+
+  @@unique([tenantId, name])
+  @@map("roles")
+}
+
+model Permission {
+  id          String   @id @default(uuid())
+  name        String   @unique
+  resource    String
+  action      String
+  description String?
+  createdAt   DateTime @default(now())
+
+  rolePermissions RolePermission[]
+
+  @@map("permissions")
+}
+
+model RolePermission {
+  id           String @id @default(uuid())
+  roleId       String
+  permissionId String
+
+  role         Role       @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  permission   Permission @relation(fields: [permissionId], references: [id], onDelete: Cascade)
+
+  @@unique([roleId, permissionId])
+  @@map("role_permissions")
+}
+
+model UserRole {
+  id       String @id @default(uuid())
+  userId   String
+  roleId   String
+
+  user     User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role     Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@map("user_roles")
+}
+
+model Building {
+  id          String   @id @default(uuid())
+  tenantId    String
+  name        String
+  address     String
+  city        String
+  country     String
+  totalFloors Int      @default(1)
+  images      String[]
+  amenities   String[]
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  tenant      Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  floors      Floor[]
+
+  @@map("buildings")
+}
+
+model Floor {
+  id          String   @id @default(uuid())
+  buildingId  String
+  name        String
+  floorNumber Int
+  capacity    Int      @default(0)
+  floorPlan   String?
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  building    Building @relation(fields: [buildingId], references: [id], onDelete: Cascade)
+  rooms       Room[]
+
+  @@map("floors")
+}
+
+model Room {
+  id           String    @id @default(uuid())
+  floorId      String
+  name         String
+  type         RoomType  @default(HOT_DESK)
+  capacity     Int       @default(1)
+  pricePerHour Decimal   @default(0) @db.Decimal(10, 2)
+  pricePerDay  Decimal   @default(0) @db.Decimal(10, 2)
+  amenities    String[]
+  images       String[]
+  description  String?
+  isActive     Boolean   @default(true)
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  floor        Floor     @relation(fields: [floorId], references: [id], onDelete: Cascade)
+  desks        Desk[]
+  bookings     Booking[]
+
+  @@map("rooms")
+}
+
+enum RoomType {
+  HOT_DESK
+  PRIVATE_CABIN
+  MEETING_ROOM
+  CONFERENCE_ROOM
+  EVENT_SPACE
+}
+
+model Desk {
+  id          String   @id @default(uuid())
+  roomId      String
+  name        String
+  deskNumber  String
+  type        DeskType @default(STANDARD)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  room        Room     @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  bookings    Booking[]
+
+  @@map("desks")
+}
+
+enum DeskType {
+  STANDARD
+  STANDING
+  PREMIUM
+  ACCESSIBLE
+}
+
+model Booking {
+  id           String        @id @default(uuid())
+  tenantId     String
+  userId       String
+  roomId       String
+  deskId       String?
+  title        String?
+  startTime    DateTime
+  endTime      DateTime
+  status       BookingStatus @default(PENDING)
+  totalPrice   Decimal       @default(0) @db.Decimal(10, 2)
+  notes        String?
+  approvedBy   String?
+  approvedAt   DateTime?
+  cancelledBy  String?
+  cancelledAt  DateTime?
+  cancelReason String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  room         Room          @relation(fields: [roomId], references: [id], onDelete: Cascade)
+  desk         Desk?         @relation(fields: [deskId], references: [id])
+
+  @@map("bookings")
+}
+
+enum BookingStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+  COMPLETED
+  NO_SHOW
+}
+
+model Subscription {
+  id                String             @id @default(uuid())
+  tenantId          String             @unique
+  plan              SubscriptionPlan   @default(FREE)
+  status            SubscriptionStatus @default(ACTIVE)
+  startDate         DateTime           @default(now())
+  endDate           DateTime?
+  trialEndDate      DateTime?
+  maxUsers          Int                @default(5)
+  maxBookings       Int                @default(50)
+  maxBuildings      Int                @default(1)
+  pricePerMonth     Decimal            @default(0) @db.Decimal(10, 2)
+  autoRenew         Boolean            @default(true)
+  cancelledAt       DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payments          Payment[]
+
+  @@map("subscriptions")
+}
+
+enum SubscriptionPlan {
+  FREE
+  BASIC
+  BUSINESS
+  ENTERPRISE
+}
+
+enum SubscriptionStatus {
+  ACTIVE
+  TRIALING
+  PAST_DUE
+  CANCELLED
+  EXPIRED
+}
+
+model Payment {
+  id             String        @id @default(uuid())
+  subscriptionId String
+  amount         Decimal       @db.Decimal(10, 2)
+  currency       String        @default("USD")
+  status         PaymentStatus @default(PENDING)
+  method         String?
+  transactionId  String?
+  paidAt         DateTime?
+  createdAt      DateTime      @default(now())
+
+  subscription   Subscription  @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+  invoice        Invoice?
+
+  @@map("payments")
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+model Invoice {
+  id          String        @id @default(uuid())
+  tenantId    String
+  paymentId   String?       @unique
+  invoiceNo   String        @unique
+  amount      Decimal       @db.Decimal(10, 2)
+  tax         Decimal       @default(0) @db.Decimal(10, 2)
+  total       Decimal       @db.Decimal(10, 2)
+  status      InvoiceStatus @default(DRAFT)
+  dueDate     DateTime?
+  paidAt      DateTime?
+  fileUrl     String?
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  tenant      Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  payment     Payment?      @relation(fields: [paymentId], references: [id])
+
+  @@map("invoices")
+}
+
+enum InvoiceStatus {
+  DRAFT
+  SENT
+  PAID
+  OVERDUE
+  CANCELLED
+}
+
+model RefreshToken {
+  id          String   @id @default(uuid())
+  userId      String
+  token       String   @unique
+  expiresAt   DateTime
+  isRevoked   Boolean  @default(false)
+  createdAt   DateTime @default(now())
+
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("refresh_tokens")
+}
+
+model Notification {
+  id        String           @id @default(uuid())
+  tenantId  String
+  userId    String
+  type      NotificationType
+  title     String
+  message   String
+  isRead    Boolean          @default(false)
+  data      Json?
+  createdAt DateTime         @default(now())
+
+  tenant    Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user      User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("notifications")
+}
+
+enum NotificationType {
+  BOOKING_CREATED
+  BOOKING_CONFIRMED
+  BOOKING_CANCELLED
+  BOOKING_REMINDER
+  SUBSCRIPTION_EXPIRING
+  INVOICE_GENERATED
+  SYSTEM_ALERT
+}
