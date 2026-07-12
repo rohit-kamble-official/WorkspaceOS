@@ -284,69 +284,89 @@ export class AuthService {
   }
 
   async _seedPermissions(tx, tenantId, ownerRoleId, managerRoleId, employeeRoleId) {
-    const permissions = [
-      { name: 'workspace:create', resource: 'workspace', action: 'create' },
-      { name: 'workspace:read', resource: 'workspace', action: 'read' },
-      { name: 'workspace:update', resource: 'workspace', action: 'update' },
-      { name: 'workspace:delete', resource: 'workspace', action: 'delete' },
-      { name: 'booking:create', resource: 'booking', action: 'create' },
-      { name: 'booking:read', resource: 'booking', action: 'read' },
-      { name: 'booking:update', resource: 'booking', action: 'update' },
-      { name: 'booking:cancel', resource: 'booking', action: 'cancel' },
-      { name: 'booking:approve', resource: 'booking', action: 'approve' },
-      { name: 'booking:all', resource: 'booking', action: 'read_all' },
-      { name: 'user:create', resource: 'user', action: 'create' },
-      { name: 'user:read', resource: 'user', action: 'read' },
-      { name: 'user:update', resource: 'user', action: 'update' },
-      { name: 'user:delete', resource: 'user', action: 'delete' },
-      { name: 'billing:view', resource: 'billing', action: 'read' },
-      { name: 'billing:manage', resource: 'billing', action: 'manage' },
-      { name: 'analytics:view', resource: 'analytics', action: 'read' },
-      { name: 'admin:manage', resource: 'admin', action: 'manage' },
-    ];
+  const permissions = [
+    { name: 'workspace:create', resource: 'workspace', action: 'create' },
+    { name: 'workspace:read', resource: 'workspace', action: 'read' },
+    { name: 'workspace:update', resource: 'workspace', action: 'update' },
+    { name: 'workspace:delete', resource: 'workspace', action: 'delete' },
+    { name: 'booking:create', resource: 'booking', action: 'create' },
+    { name: 'booking:read', resource: 'booking', action: 'read' },
+    { name: 'booking:update', resource: 'booking', action: 'update' },
+    { name: 'booking:cancel', resource: 'booking', action: 'cancel' },
+    { name: 'booking:approve', resource: 'booking', action: 'approve' },
+    { name: 'booking:all', resource: 'booking', action: 'read_all' },
+    { name: 'user:create', resource: 'user', action: 'create' },
+    { name: 'user:read', resource: 'user', action: 'read' },
+    { name: 'user:update', resource: 'user', action: 'update' },
+    { name: 'user:delete', resource: 'user', action: 'delete' },
+    { name: 'billing:view', resource: 'billing', action: 'read' },
+    { name: 'billing:manage', resource: 'billing', action: 'manage' },
+    { name: 'analytics:view', resource: 'analytics', action: 'read' },
+    { name: 'admin:manage', resource: 'admin', action: 'manage' },
+  ];
 
-    for (const perm of permissions) {
-      const existing = await tx.permission.findUnique({ where: { name: perm.name } });
-      if (!existing) {
-        await tx.permission.create({ data: perm });
-      }
-    }
+  // Create all permissions at once
+  await tx.permission.createMany({
+    data: permissions,
+    skipDuplicates: true,
+  });
 
-    // Owner gets all permissions
-    const allPerms = await tx.permission.findMany();
-    for (const perm of allPerms) {
-      await tx.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: ownerRoleId, permissionId: perm.id } },
-        create: { roleId: ownerRoleId, permissionId: perm.id },
-        update: {}
-      });
-    }
+  const allPerms = await tx.permission.findMany();
 
-    // Manager gets workspace + booking permissions
-    const managerPerms = allPerms.filter(p => 
-      ['workspace:read', 'workspace:update', 'booking:create', 'booking:read', 'booking:update', 
-       'booking:cancel', 'booking:approve', 'booking:all', 'user:read', 'analytics:view'].includes(p.name)
-    );
-    for (const perm of managerPerms) {
-      await tx.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: managerRoleId, permissionId: perm.id } },
-        create: { roleId: managerRoleId, permissionId: perm.id },
-        update: {}
-      });
-    }
+  const ownerIds = allPerms.map((p) => ({
+    roleId: ownerRoleId,
+    permissionId: p.id,
+  }));
 
-    // Employee gets basic permissions
-    const employeePerms = allPerms.filter(p =>
-      ['workspace:read', 'booking:create', 'booking:read', 'booking:cancel'].includes(p.name)
-    );
-    for (const perm of employeePerms) {
-      await tx.rolePermission.upsert({
-        where: { roleId_permissionId: { roleId: employeeRoleId, permissionId: perm.id } },
-        create: { roleId: employeeRoleId, permissionId: perm.id },
-        update: {}
-      });
-    }
-  }
+  const managerNames = [
+    'workspace:read',
+    'workspace:update',
+    'booking:create',
+    'booking:read',
+    'booking:update',
+    'booking:cancel',
+    'booking:approve',
+    'booking:all',
+    'user:read',
+    'analytics:view',
+  ];
+
+  const employeeNames = [
+    'workspace:read',
+    'booking:create',
+    'booking:read',
+    'booking:cancel',
+  ];
+
+  const managerIds = allPerms
+    .filter((p) => managerNames.includes(p.name))
+    .map((p) => ({
+      roleId: managerRoleId,
+      permissionId: p.id,
+    }));
+
+  const employeeIds = allPerms
+    .filter((p) => employeeNames.includes(p.name))
+    .map((p) => ({
+      roleId: employeeRoleId,
+      permissionId: p.id,
+    }));
+
+  await tx.rolePermission.createMany({
+    data: ownerIds,
+    skipDuplicates: true,
+  });
+
+  await tx.rolePermission.createMany({
+    data: managerIds,
+    skipDuplicates: true,
+  });
+
+  await tx.rolePermission.createMany({
+    data: employeeIds,
+    skipDuplicates: true,
+  });
+}
 }
 
 export const authService = new AuthService();
