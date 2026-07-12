@@ -3,14 +3,25 @@ import { sendSuccess, sendCreated, sendError } from '../utils/response.js';
 import logger from '../utils/logger.js';
 
 export class AuthController {
-  async register(req, res, next) {
-    try {
-      const result = await authService.register(req.validated.body);
-      return sendCreated(res, result, 'Registration successful');
-    } catch (error) {
-      next(error);
-    }
+async register(req, res, next) {
+  try {
+    const result = await authService.register(req.validated.body);
+    return sendCreated(res, result, "Registration successful");
+  } catch (error) {
+    console.error("====================================");
+    console.error("REGISTER ERROR");
+    console.error(error);
+    console.error("Message:", error.message);
+    console.error("Stack:", error.stack);
+
+    if (error.code) console.error("Code:", error.code);
+    if (error.meta) console.error("Meta:", error.meta);
+
+    console.error("====================================");
+
+    next(error);
   }
+}
 
   async login(req, res, next) {
     try {
